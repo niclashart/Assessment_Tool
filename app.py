@@ -271,12 +271,95 @@ elif page == "Bewerber bewerten":
                 
                 # Preview data
                 try:
+                    # Globale Variable für die Daten
                     df = pd.read_excel(tmp_path, sheet_name="Tabelle1")
-                    st.write("Vorschau der Bewerberdaten:")
-                    st.dataframe(df.head())
+                    st.write("Übersicht aller Bewerberdaten:")
+                    st.dataframe(df)
                     
-                    # Make predictions button
-                    if st.button("Eignungsprognosen erstellen", key="excel_predict"):
+                    # Individuelle Kandidatenauswahl 
+                    if 'Nachname' in df.columns and 'Vorname' in df.columns:
+                        # Liste der Kandidaten erstellen (Nachname, Vorname)
+                        kandidaten = [f"{row['Nachname']}, {row['Vorname']}" for _, row in df.iterrows()]
+                        
+                        # Kandidatenauswahl
+                        st.subheader("Einzelne Kandidaten bewerten")
+                        selected_kandidat = st.selectbox(
+                            "Wählen Sie einen Kandidaten aus:",
+                            options=kandidaten,
+                            key="kandidat_auswahl"
+                        )
+                        
+                        if selected_kandidat:
+                            # Index des ausgewählten Kandidaten ermitteln
+                            nachname, vorname = selected_kandidat.split(", ")
+                            kandidat_idx = df[(df['Nachname'] == nachname) & (df['Vorname'] == vorname)].index[0]
+                            kandidat_data = df.iloc[kandidat_idx]
+                            
+                            # Kandidatendetails anzeigen
+                            st.write("### Kandidatendetails")
+                            
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.write(f"**Name:** {kandidat_data['Vorname']} {kandidat_data['Nachname']}")
+                                st.write(f"**Berufabschluss:** {kandidat_data['Berufabschluss']}")
+                                st.write(f"**Schulabschluss:** {kandidat_data['Schulabschluss']}")
+                            with col2:
+                                st.write(f"**Qualifikationsstufe:** {kandidat_data['Qualifikationstufe']}")
+                                st.write(f"**Monatsgehalt Einstieg:** {kandidat_data['Monatsgehalt Einstieg']} €")
+                                st.write(f"**Monatsgehalt aktuell:** {kandidat_data['Monatsgehalt aktuell/ bzw. zuletz bezogenes Gehalt']} €")
+                            
+                            # Kandidaten bewerten Button
+                            if st.button("Einzelnen Kandidaten bewerten", key="einzeln_bewerten"):
+                                with st.spinner('Eignungsprognose wird erstellt...'):
+                                    # Parameter für die Bewertung extrahieren
+                                    monatsgehalt_aktuell = kandidat_data['Monatsgehalt aktuell/ bzw. zuletz bezogenes Gehalt']
+                                    monatsgehalt_einstieg = kandidat_data['Monatsgehalt Einstieg']
+                                    quali = kandidat_data['Qualifikationstufe']
+                                    schul = kandidat_data['Schulabschluss']
+                                    beruf = kandidat_data['Berufabschluss']
+                                    
+                                    # Manuelle Prognose für diesen Kandidaten
+                                    score = prognose_tool_ethisch.prognose_manuell(
+                                        monatsgehalt_aktuell,
+                                        monatsgehalt_einstieg, 
+                                        quali,
+                                        schul,
+                                        beruf
+                                    )
+                                    
+                                    # Display result
+                                    st.success(f"Eignungsprognose für {kandidat_data['Vorname']} {kandidat_data['Nachname']} erfolgreich erstellt!")
+                                    
+                                    # Score anzeigen
+                                    score_text = f"Eignungs-Score: {score:.2f}%"
+                                    
+                                    # Farbliche Darstellung und Empfehlungen
+                                    if score < 40:
+                                        st.error(score_text)
+                                        st.error("Nicht empfohlen: Der/die Bewerber/in hat eine niedrige prognostizierte Eignung für das Unternehmen.")
+                                    elif score < 70:
+                                        st.warning(score_text)
+                                        st.warning("Bedingt empfohlen: Der/die Bewerber/in könnte für das Unternehmen geeignet sein. Zusätzliche Faktoren prüfen.")
+                                    else:
+                                        st.success(score_text)
+                                        st.success("Empfohlen: Der/die Bewerber/in zeigt eine hohe prognostizierte Eignung für das Unternehmen.")
+                                    
+                                    # Fortschrittsbalken
+                                    st.progress(int(score) / 100)
+                                    
+                                    # Einfache Visualisierung
+                                    fig, ax = plt.subplots(figsize=(10, 2))
+                                    sns.barplot(x=[score], y=["Eignung"], ax=ax, palette=["green" if score >= 70 else "orange" if score >= 40 else "red"])
+                                    ax.set_xlim(0, 100)
+                                    ax.set_xlabel('Eignungs-Score (%)')
+                                    ax.set_ylabel('')
+                                    st.pyplot(fig)
+                    else:
+                        st.warning("Die Excel-Datei enthält keine Spalten für 'Nachname' und 'Vorname'. Eine individuelle Kandidatenbewertung ist nicht möglich.")
+                    
+                    # Make predictions button für alle Kandidaten
+                    st.subheader("Alle Bewerber gleichzeitig bewerten")
+                    if st.button("Eignungsprognosen für alle Bewerber erstellen", key="excel_predict"):
                         with st.spinner('Eignungsprognosen werden erstellt...'):
                             # Benutze die neue Funktion für Excel-Prognosen
                             ergebnisse = prognose_tool_ethisch.prognose_excel(tmp_path)
